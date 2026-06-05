@@ -1,1 +1,3 @@
 pip install fastapi uvicorn pydantic python-dotenv
+pip install langchain pypdf
+pip install langchain-community
