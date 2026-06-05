@@ -4,7 +4,8 @@ Purpose:
 
 Why this file exists:
     Instead of hardcoding values throughout the application,
-    we keep important settings in a single location.
+    we keep important settings in a single location and
+    load them from environment variables when possible.
 
 How it fits into the architecture:
     Every component of the system can import configuration
@@ -18,7 +19,10 @@ Examples:
     - Data directories
 """
 
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 
 # ---------------------------------------------------------------------
@@ -33,22 +37,29 @@ TESTS_DIR = PROJECT_ROOT / "tests"
 
 
 # ---------------------------------------------------------------------
+# Environment Variables
+# ---------------------------------------------------------------------
+
+load_dotenv(PROJECT_ROOT / ".env")
+
+
+# ---------------------------------------------------------------------
 # LLM Configuration
 # ---------------------------------------------------------------------
 
-OLLAMA_MODEL_NAME = "llama3"
+OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "llama3")
 
 
 # ---------------------------------------------------------------------
 # Chunking Configuration
 # ---------------------------------------------------------------------
 
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 500))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 100))
 
 
 # ---------------------------------------------------------------------
 # Retrieval Configuration
 # ---------------------------------------------------------------------
 
-TOP_K_RESULTS = 5
+TOP_K_RESULTS = int(os.getenv("TOP_K_RESULTS", 5))
