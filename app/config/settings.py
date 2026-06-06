@@ -13,6 +13,7 @@ How it fits into the architecture:
 
 Examples:
     - LLM model name
+    - Embedding model name
     - Chunk size
     - Chunk overlap
     - Retrieval top-k value
@@ -48,6 +49,16 @@ load_dotenv(PROJECT_ROOT / ".env")
 # ---------------------------------------------------------------------
 
 OLLAMA_MODEL_NAME = os.getenv("OLLAMA_MODEL_NAME", "llama3")
+
+
+# ---------------------------------------------------------------------
+# Embedding Configuration
+# ---------------------------------------------------------------------
+
+EMBEDDING_MODEL_NAME = os.getenv(
+    "EMBEDDING_MODEL_NAME",
+    "BAAI/bge-small-en-v1.5"
+)
 
 
 # ---------------------------------------------------------------------

@@ -2,3 +2,4 @@ pip install fastapi uvicorn pydantic python-dotenv
 pip install langchain pypdf
 pip install langchain-community
 pip install langchain-text-splitters
+pip install sentence-transformers
