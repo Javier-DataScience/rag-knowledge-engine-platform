@@ -16,7 +16,7 @@ st.set_page_config(
     page_title="RAG Knowledge Engine",
 )
 
-st.title("RAG Knowledge Engine Platform")
+st.title("RAG Knowledge Engine Platform: PDF-RAG Assistant")
 
 question = st.text_input(
     "Ask a question about the loaded document:"

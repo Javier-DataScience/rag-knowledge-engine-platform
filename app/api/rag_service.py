@@ -1,24 +1,21 @@
 """
+Module: rag_service.py
+
 Purpose:
-    Centralized RAG service for FastAPI.
+    This module defines the RAGService class, which acts as the
+    high-level orchestrator of the Retrieval-Augmented Generation (RAG) system.
 
-Why this file exists:
-    Creates and stores the RAG pipeline
-    so it can be reused across requests.
+    It is responsible for:
+    - Loading and processing documents
+    - Chunking text
+    - Generating embeddings
+    - Building and querying the FAISS vector store
+    - Performing retrieval
+    - Calling the LLM (Ollama)
+    - Returning final answers with source metadata
 
-Architecture:
-
-    FastAPI
-        ↓
-    RAGService
-        ↓
-    RAGPipeline
-        ↓
-    Retriever
-        ↓
-    FAISS
-        ↓
-    Llama 3
+    Additionally, this version includes a production-quality improvement:
+    - Deduplication of retrieved source documents (by source + page)
 """
 
 from app.ingestion.pdf_loader import PDFLoader
@@ -32,74 +29,79 @@ from app.rag.rag_pipeline import RAGPipeline
 
 class RAGService:
     """
-    Creates and manages the RAG pipeline.
+    High-level service that builds and manages the full RAG pipeline.
     """
 
-    def __init__(
-        self,
-        pdf_path: str,
-    ):
-        self.pdf_path = pdf_path
+    def __init__(self, pdf_path: str):
+        """
+        Initialize the RAG service.
 
+        Args:
+            pdf_path (str): Path to the PDF document used as knowledge source.
+        """
+        self.pdf_path = pdf_path
         self.rag_pipeline = self._build_pipeline()
 
-    def _build_pipeline(
-        self,
-    ) -> RAGPipeline:
+    def _build_pipeline(self) -> RAGPipeline:
         """
-        Build the complete RAG pipeline.
+        Build the full RAG pipeline step by step.
         """
 
+        # Load documents
         loader = PDFLoader()
-        documents = loader.load(
-            self.pdf_path
-        )
+        documents = loader.load(self.pdf_path)
 
+        # Split into chunks
         splitter = TextSplitter()
+        chunks = splitter.split_documents(documents)
 
-        chunks = splitter.split_documents(
-            documents
-        )
-
+        # Create embeddings
         embedding_model = EmbeddingModel()
+        chunk_texts = [chunk.page_content for chunk in chunks]
+        embeddings = embedding_model.embed_documents(chunk_texts)
 
-        chunk_texts = [
-            chunk.page_content
-            for chunk in chunks
-        ]
-
-        embeddings = embedding_model.embed_documents(
-            chunk_texts
-        )
-
+        # Build vector store
         store = FAISSStore()
+        store.add_documents(chunks, embeddings)
 
-        store.add_documents(
-            chunks,
-            embeddings,
-        )
-
+        # Retriever
         retriever = Retriever(
             embedding_model=embedding_model,
             vector_store=store,
         )
 
+        # LLM
         llm = OllamaLLM()
 
+        # RAG pipeline
         return RAGPipeline(
             retriever=retriever,
             llm=llm,
         )
 
-    def ask(
-        self,
-        question: str,
-    ) -> dict:
+    def ask(self, question: str) -> dict:
         """
-        Ask a question using the
-        initialized RAG pipeline.
+        Ask a question to the RAG system and return a cleaned response.
+
+        This version includes:
+        - Deduplication of sources (post-processing layer)
         """
 
-        return self.rag_pipeline.ask(
-            question
-        )
+        result = self.rag_pipeline.ask(question)
+
+        # -----------------------------
+        # Deduplicate sources
+        # -----------------------------
+        seen = set()
+        unique_sources = []
+
+        for src in result["sources"]:
+            key = (src["source"], src["page"])
+
+            if key not in seen:
+                seen.add(key)
+                unique_sources.append(src)
+
+        result["sources"] = unique_sources
+
+        return result
