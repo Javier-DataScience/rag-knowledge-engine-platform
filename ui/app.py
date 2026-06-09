@@ -10,6 +10,7 @@ Features:
     - Ask questions about uploaded documents
     - Display answers
     - Display source references
+    - Deduplicate source references
     - Upload progress feedback
     - Basic error handling
 """
@@ -158,6 +159,12 @@ else:
 
                 else:
 
+                    # --------------------------------------
+                    # Deduplicate source references
+                    # --------------------------------------
+
+                    unique_sources = set()
+
                     for source in sources:
 
                         source_file = source.get(
@@ -169,6 +176,15 @@ else:
                             "page",
                             "N/A"
                         )
+
+                        unique_sources.add(
+                            (source_file, page)
+                        )
+
+                    for source_file, page in sorted(
+                        unique_sources,
+                        key=lambda x: str(x[1])
+                    ):
 
                         st.write(
                             f"• {source_file} (Page {page})"
