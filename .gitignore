@@ -68,3 +68,11 @@ logs/
 
 .DS_Store
 Thumbs.db
+
+
+*.pyc
+
+data/uploaded/
+.vscode/
+.streamlit/secrets.toml
+req.txt
