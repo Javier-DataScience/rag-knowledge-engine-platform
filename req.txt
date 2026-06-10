@@ -8,3 +8,5 @@ pip install ollama
 pip install fastapi uvicorn
 pip install streamlit
 pip install requests
+pip install -e .
+pip install PyPDF2

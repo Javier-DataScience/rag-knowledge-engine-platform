@@ -1,71 +1,149 @@
 """
-Module: main.py
+Module: main.py (FastAPI API Layer)
 
 Purpose:
-    FastAPI entry point for the RAG Knowledge Engine Platform.
+--------
+This module exposes the RAG system as a REST API.
 
-    Adds:
-    - /ask endpoint (RAG Q&A)
-    - /upload endpoint (PDF ingestion via Streamlit)
+It acts as a thin orchestration layer between:
+    - Streamlit UI
+    - Gradio UI (future)
+    - RAGPipeline (core logic)
+    - Retriever + LLM backend
+
+Endpoints:
+----------
+1. POST /ask
+    - Receives a question
+    - Returns answer + structured citations
+
+2. POST /upload
+    - Receives a PDF file
+    - Stores it locally
+    - Rebuilds RAG pipeline with new document
+
+IMPORTANT DESIGN RULES:
+-----------------------
+- NO embedding logic here
+- NO chunking logic here
+- NO FAISS logic here
+- NO LLM logic here
+
+This file ONLY orchestrates existing components.
+
+Phase A.4:
+----------
+Adds structured citation support.
+
+API response format:
+
+{
+    "question": "...",
+    "answer": "...",
+    "sources": [
+        {
+            "source": "document.pdf",
+            "page": 5
+        }
+    ]
+}
 """
 
 from fastapi import FastAPI, UploadFile, File
 import shutil
 import os
 
-from app.api.schemas import AskRequest, AskResponse
-from app.api.rag_service import RAGService
+from app.retrieval.retriever import Retriever
+from app.llms.ollama_llm import OllamaLLM
+from app.rag.rag_pipeline import RAGPipeline
+
+
+# --------------------------------------------------
+# App initialization
+# --------------------------------------------------
 
 app = FastAPI(
-    title="RAG Knowledge Engine Platform",
-    version="1.0.0",
+    title="RAG Knowledge Engine API",
+    version="1.0"
 )
 
-# -----------------------------
-# RAG Service (default PDF)
-# -----------------------------
-rag_service = RAGService(
-    pdf_path="data/raw/Supervised-Learning.pdf"
+UPLOAD_DIR = "data/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+print("Initializing RAG system...")
+
+llm = OllamaLLM()
+
+# Default pipeline
+rag = RAGPipeline(
+    retriever=Retriever(),
+    llm=llm
 )
 
+
+# --------------------------------------------------
+# Health Check
+# --------------------------------------------------
 
 @app.get("/")
 def root():
-    return {"message": "RAG API is running"}
+
+    return {
+        "status": "ok",
+        "message": "RAG API is running"
+    }
 
 
-@app.post("/ask", response_model=AskResponse)
-def ask_question(request: AskRequest):
+# --------------------------------------------------
+# Question Answering Endpoint
+# --------------------------------------------------
 
-    return rag_service.ask(request.question)
+@app.post("/ask")
+def ask_question(payload: dict):
+
+    question = payload.get("question", "")
+
+    result = rag.ask(question)
+
+    return {
+        "question": question,
+        "answer": result.get("answer", ""),
+        "sources": result.get("sources", [])
+    }
 
 
-# -----------------------------
-# NEW: PDF Upload Endpoint
-# -----------------------------
-UPLOAD_DIR = "data/uploaded"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
+# --------------------------------------------------
+# PDF Upload + Reindexing Endpoint
+# --------------------------------------------------
 
 @app.post("/upload")
 def upload_pdf(file: UploadFile = File(...)):
-    """
-    Upload PDF and rebuild RAG system.
-    Phase A: synchronous rebuild (simplified).
-    """
 
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    file_path = os.path.join(
+        UPLOAD_DIR,
+        file.filename
+    )
 
-    # Save file
+    # Save uploaded PDF
+
     with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        shutil.copyfileobj(
+            file.file,
+            buffer
+        )
 
-    # Return early acknowledgment (IMPORTANT CHANGE)
-    global rag_service
+    print("PDF received:", file.filename)
+    print("Rebuilding RAG pipeline...")
 
-    rag_service = RAGService(pdf_path=file_path)
+    global rag
+
+    rag = RAGPipeline(
+        retriever=Retriever(pdf_path=file_path),
+        llm=llm
+    )
 
     return {
-        "message": "PDF uploaded and RAG system rebuilt successfully",
+        "status": "ok",
+        "message": "PDF indexed successfully",
         "file": file.filename
     }

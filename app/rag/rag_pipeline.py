@@ -1,77 +1,83 @@
 """
+Module: rag_pipeline.py
+
 Purpose:
-    End-to-end Retrieval-Augmented Generation pipeline.
-
-Why this file exists:
-    Connects retrieval and generation into a single workflow.
-
-How it fits into the architecture:
-
-    Question
-        ↓
-    Retriever
-        ↓
-    Relevant Chunks
-        ↓
-    Context Construction
-        ↓
-    Prompt Construction
-        ↓
-    Llama 3
-        ↓
-    Grounded Answer + Sources
+--------
+Core RAG orchestration layer.
 
 Responsibilities:
-    - Retrieve relevant chunks
-    - Build context
-    - Build grounded prompt
-    - Generate final answer
-    - Return source information
+- Retrieve relevant chunks from retriever
+- Build context for the LLM
+- Generate final answer
+- Preserve retrieval metadata for citations
+
+Outputs:
+--------
+Returns:
+{
+    "answer": str,
+    "sources": list
+}
+
+This allows:
+- FastAPI to expose structured citations
+- Streamlit to display sources
+- Gradio to reuse the same API contract
+
+Phase:
+------
+Phase A.4 - Citation-ready RAG pipeline
 """
 
-from app.retrieval.retriever import Retriever
-from app.llms.ollama_llm import OllamaLLM
+from typing import Dict, List
 
 
 class RAGPipeline:
-    """
-    End-to-end RAG workflow.
-    """
 
-    def __init__(
-        self,
-        retriever: Retriever,
-        llm: OllamaLLM,
-    ):
+    def __init__(self, retriever, llm):
+        """
+        Parameters
+        ----------
+        retriever:
+            FAISS retriever returning structured results.
+
+        llm:
+            LLM wrapper (Ollama or future models).
+        """
+
         self.retriever = retriever
         self.llm = llm
 
-    def ask(
-        self,
-        question: str,
-    ) -> dict:
-        """
-        Generate a grounded answer and return sources.
-        """
+    def ask(self, question: str) -> Dict:
 
-        documents = self.retriever.retrieve(
-            question
-        )
+        # --------------------------------------------------
+        # STEP 1: Retrieve documents
+        # --------------------------------------------------
 
-        context = "\n\n".join(
-            doc.page_content
-            for doc in documents
-        )
+        results = self.retriever.search(question)
+
+        # --------------------------------------------------
+        # STEP 2: Build context
+        # --------------------------------------------------
+
+        context_texts: List[str] = []
+
+        for item in results:
+
+            if isinstance(item, dict) and "text" in item:
+                context_texts.append(item["text"])
+
+            elif isinstance(item, str):
+                context_texts.append(item)
+
+        context = "\n".join(context_texts)
+
+        # --------------------------------------------------
+        # STEP 3: Build prompt
+        # --------------------------------------------------
 
         prompt = f"""
-You are a helpful AI assistant.
-
-Use ONLY the information contained in the context below.
-
-If the answer cannot be found in the context,
-respond with:
-
-"I could not find that information in the provided documents."
+You are a helpful assistant. Use the context below to answer the question.
 
 Context:
 {context}
@@ -79,30 +85,50 @@ Context:
 Question:
 {question}
 
+Instructions:
+- Answer only using the provided context.
+- Be clear and concise.
+- If context is insufficient, say so.
+
 Answer:
 """
 
-        answer = self.llm.generate(
-            prompt
-        )
+        # --------------------------------------------------
+        # STEP 4: Generate answer
+        # --------------------------------------------------
+
+        answer = self.llm.generate(prompt)
+
+        # --------------------------------------------------
+        # STEP 5: Build citations
+        # --------------------------------------------------
 
         sources = []
 
-        for doc in documents:
-            sources.append(
-                {
-                    "source": doc.metadata.get(
-                        "source",
-                        "Unknown"
-                    ),
-                    "page": doc.metadata.get(
-                        "page",
-                        "Unknown"
-                    ),
-                }
-            )
+        seen_pages = set()
+
+        for item in results:
+
+            if not isinstance(item, dict):
+                continue
+
+            page = item.get("page")
+
+            if page in seen_pages:
+                continue
+
+            seen_pages.add(page)
+
+            sources.append({
+                "source": self.retriever.pdf_path.split("\\")[-1],
+                "page": page
+            })
+
+        # --------------------------------------------------
+        # STEP 6: Return structured response
+        # --------------------------------------------------
 
         return {
             "answer": answer,
-            "sources": sources,
+            "sources": sources
         }

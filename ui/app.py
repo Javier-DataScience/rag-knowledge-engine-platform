@@ -1,18 +1,12 @@
 """
 Module: app.py
 
-Purpose:
-    Streamlit frontend for the RAG Knowledge Engine Platform:
-    PDF-RAG Assistant.
+Streamlit frontend for RAG Knowledge Engine Platform.
 
-Features:
-    - Upload PDF documents
-    - Ask questions about uploaded documents
-    - Display answers
-    - Display source references
-    - Deduplicate source references
-    - Upload progress feedback
-    - Basic error handling
+Frontend ONLY:
+- Sends requests to FastAPI backend
+- Displays answers and sources
+- No ML logic inside UI
 """
 
 import requests
@@ -67,9 +61,7 @@ if uploaded_file is not None:
                 )
             }
 
-            with st.spinner(
-                "Uploading and indexing PDF. This may take a while..."
-            ):
+            with st.spinner("Uploading and indexing PDF..."):
 
                 response = requests.post(
                     f"{API_URL}/upload",
@@ -82,25 +74,15 @@ if uploaded_file is not None:
             st.success("Indexing completed successfully.")
 
         except requests.exceptions.Timeout:
-
-            st.error(
-                "Upload request timed out. "
-                "The backend may still be processing the document."
-            )
+            st.error("Upload timed out. Backend may still be processing.")
 
         except requests.exceptions.ConnectionError:
-
-            st.error(
-                "Cannot connect to FastAPI backend. "
-                "Make sure the API is running."
-            )
+            st.error("Cannot connect to FastAPI backend.")
 
         except Exception as e:
-
             st.error(f"Unexpected error: {str(e)}")
 
         finally:
-
             st.session_state.indexing = False
 
 # --------------------------------------------------
@@ -110,102 +92,65 @@ if uploaded_file is not None:
 st.header("Ask Questions")
 
 if st.session_state.indexing:
-
-    st.warning(
-        "Please wait until indexing is completed before asking questions."
-    )
-
+    st.warning("Wait until indexing is finished before asking questions.")
 else:
 
-    question = st.text_input(
-        "Ask a question about the document:"
-    )
+    question = st.text_input("Ask a question about the document:")
 
     if st.button("Ask"):
 
         if not question.strip():
-
             st.warning("Please enter a question.")
-
         else:
 
             try:
-
                 with st.spinner("Generating answer..."):
 
                     response = requests.post(
                         f"{API_URL}/ask",
-                        json={
-                            "question": question
-                        },
-                        timeout=120
+                        json={"question": question},
+                        timeout=300
                     )
 
                     response.raise_for_status()
-
                     result = response.json()
 
                 st.subheader("Answer")
+                st.write(result.get("answer", "No answer returned"))
 
-                st.write(result["answer"])
+                # --------------------------------------------------
+                # SAFE SOURCE HANDLING (no crash if missing)
+                # --------------------------------------------------
 
                 st.subheader("Sources")
 
-                sources = result.get("sources", [])
+                sources = result.get("sources", None)
 
-                if len(sources) == 0:
-
-                    st.info("No sources returned.")
-
+                if not sources:
+                    st.info("No sources returned from backend.")
                 else:
-
-                    # --------------------------------------
-                    # Deduplicate source references
-                    # --------------------------------------
 
                     unique_sources = set()
 
                     for source in sources:
 
-                        source_file = source.get(
-                            "source",
-                            "Unknown Source"
-                        )
+                        if isinstance(source, dict):
+                            source_file = source.get("source", "Unknown Source")
+                            page = source.get("page", "N/A")
+                        else:
+                            source_file = str(source)
+                            page = "N/A"
 
-                        page = source.get(
-                            "page",
-                            "N/A"
-                        )
+                        unique_sources.add((source_file, page))
 
-                        unique_sources.add(
-                            (source_file, page)
-                        )
-
-                    for source_file, page in sorted(
-                        unique_sources,
-                        key=lambda x: str(x[1])
-                    ):
-
-                        st.write(
-                            f"• {source_file} (Page {page})"
-                        )
+                    for source_file, page in sorted(unique_sources, key=lambda x: str(x[1])):
+                        st.write(f"• {source_file} (Page {page})")
 
             except requests.exceptions.Timeout:
-
-                st.error(
-                    "Request timed out. "
-                    "The model may be taking too long to respond."
-                )
+                st.error("Request timed out. Model may be slow.")
 
             except requests.exceptions.ConnectionError:
-
-                st.error(
-                    "Cannot connect to FastAPI backend. "
-                    "Make sure the API is running."
-                )
+                st.error("Cannot connect to FastAPI backend.")
 
             except Exception as e:
-
-                st.error(
-                    f"Unexpected error: {str(e)}"
-                )
+                st.error(f"Unexpected error: {str(e)}")

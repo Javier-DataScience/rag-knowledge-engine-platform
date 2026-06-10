@@ -76,3 +76,13 @@ data/uploaded/
 .vscode/
 .streamlit/secrets.toml
 req.txt
+
+# Runtime uploads
+data/uploads/
+data/uploaded/
+
+# Packaging artifacts
+*.egg-info/
+
+# Streamlit secrets
+.streamlit/secrets.toml

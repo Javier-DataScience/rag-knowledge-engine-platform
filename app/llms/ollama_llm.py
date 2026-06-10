@@ -1,53 +1,50 @@
 """
+Ollama LLM Wrapper (Phase A Stable Version)
+
 Purpose:
-    Ollama LLM wrapper for the RAG Knowledge Engine Platform.
+- Provide a clean interface to Ollama local server
+- Remove environment ambiguity (localhost vs docker vs host.docker.internal)
+- Ensure reliable chat() calls from both local and future Docker setups
 
-Why this file exists:
-    Provides a clean interface for interacting with local LLMs
-    running through Ollama.
-
-Responsibilities:
-    - Send prompts to Ollama
-    - Return model responses
-    - Support configurable Ollama hosts
+Key decision:
+- We explicitly use 127.0.0.1 because this module is executed on the HOST (not inside Docker)
 """
 
+import os
 from ollama import Client
-
-from app.config.settings import (
-    OLLAMA_MODEL_NAME,
-    OLLAMA_HOST,
-)
 
 
 class OllamaLLM:
-    """
-    Wrapper around an Ollama-hosted LLM.
-    """
-
     def __init__(self):
-        self.model_name = OLLAMA_MODEL_NAME
-
-        self.client = Client(
-            host=OLLAMA_HOST
-        )
-
-    def generate(
-        self,
-        prompt: str
-    ) -> str:
         """
-        Generate a response from the model.
+        Initialize Ollama client with a stable host configuration.
         """
 
-        response = self.client.chat(
-            model=self.model_name,
-            messages=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ]
-        )
+        # Explicit and safe default for local execution
+        self.host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
-        return response["message"]["content"]
+        self.client = Client(host=self.host)
+
+    def generate(self, prompt: str) -> str:
+        """
+        Generate response using Ollama chat model.
+        """
+
+        try:
+            response = self.client.chat(
+                model=os.getenv("OLLAMA_MODEL_NAME", "llama3"),
+                messages=[
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            )
+
+            # Ollama returns structured response
+            return response["message"]["content"]
+
+        except Exception as e:
+            raise RuntimeError(
+                f"Ollama generation failed. Host={self.host}. Error={str(e)}"
+            )
