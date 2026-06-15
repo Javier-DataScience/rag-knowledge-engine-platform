@@ -16,3 +16,6 @@ ollama
 
 streamlit
 requests
+
+PyPDF2
+gradio

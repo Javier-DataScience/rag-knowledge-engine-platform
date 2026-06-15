@@ -9,10 +9,18 @@ Frontend ONLY:
 - No ML logic inside UI
 """
 
+import os
 import requests
 import streamlit as st
 
-API_URL = "http://127.0.0.1:8000"
+# --------------------------------------------------
+# Backend Configuration
+# --------------------------------------------------
+
+API_URL = os.getenv(
+    "API_URL",
+    "http://127.0.0.1:8000"
+)
 
 # --------------------------------------------------
 # Page Configuration
@@ -92,65 +100,132 @@ if uploaded_file is not None:
 st.header("Ask Questions")
 
 if st.session_state.indexing:
-    st.warning("Wait until indexing is finished before asking questions.")
+    st.warning(
+        "Wait until indexing is finished before asking questions."
+    )
+
 else:
 
-    question = st.text_input("Ask a question about the document:")
+    question = st.text_input(
+        "Ask a question about the document:"
+    )
 
     if st.button("Ask"):
 
         if not question.strip():
-            st.warning("Please enter a question.")
+
+            st.warning(
+                "Please enter a question."
+            )
+
         else:
 
             try:
-                with st.spinner("Generating answer..."):
+
+                with st.spinner(
+                    "Generating answer..."
+                ):
 
                     response = requests.post(
                         f"{API_URL}/ask",
-                        json={"question": question},
+                        json={
+                            "question": question
+                        },
                         timeout=300
                     )
 
                     response.raise_for_status()
+
                     result = response.json()
 
                 st.subheader("Answer")
-                st.write(result.get("answer", "No answer returned"))
+
+                st.write(
+                    result.get(
+                        "answer",
+                        "No answer returned"
+                    )
+                )
 
                 # --------------------------------------------------
-                # SAFE SOURCE HANDLING (no crash if missing)
+                # SAFE SOURCE HANDLING
                 # --------------------------------------------------
 
                 st.subheader("Sources")
 
-                sources = result.get("sources", None)
+                sources = result.get(
+                    "sources",
+                    None
+                )
 
                 if not sources:
-                    st.info("No sources returned from backend.")
+
+                    st.info(
+                        "No sources returned from backend."
+                    )
+
                 else:
 
                     unique_sources = set()
 
                     for source in sources:
 
-                        if isinstance(source, dict):
-                            source_file = source.get("source", "Unknown Source")
-                            page = source.get("page", "N/A")
+                        if isinstance(
+                            source,
+                            dict
+                        ):
+
+                            source_file = source.get(
+                                "source",
+                                "Unknown Source"
+                            )
+
+                            page = source.get(
+                                "page",
+                                "N/A"
+                            )
+
                         else:
-                            source_file = str(source)
+
+                            source_file = str(
+                                source
+                            )
+
                             page = "N/A"
 
-                        unique_sources.add((source_file, page))
+                        unique_sources.add(
+                            (
+                                source_file,
+                                page
+                            )
+                        )
 
-                    for source_file, page in sorted(unique_sources, key=lambda x: str(x[1])):
-                        st.write(f"• {source_file} (Page {page})")
+                    for (
+                        source_file,
+                        page
+                    ) in sorted(
+                        unique_sources,
+                        key=lambda x: str(x[1])
+                    ):
+
+                        st.write(
+                            f"• {source_file} (Page {page})"
+                        )
 
             except requests.exceptions.Timeout:
-                st.error("Request timed out. Model may be slow.")
+
+                st.error(
+                    "Request timed out. Model may be slow."
+                )
 
             except requests.exceptions.ConnectionError:
-                st.error("Cannot connect to FastAPI backend.")
+
+                st.error(
+                    "Cannot connect to FastAPI backend."
+                )
 
             except Exception as e:
-                st.error(f"Unexpected error: {str(e)}")
+
+                st.error(
+                    f"Unexpected error: {str(e)}"
+                )
