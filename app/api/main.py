@@ -3,53 +3,18 @@ Module: main.py (FastAPI API Layer)
 
 Purpose:
 --------
-This module exposes the RAG system as a REST API.
+REST API layer for RAG Knowledge Engine.
 
-It acts as a thin orchestration layer between:
-    - Streamlit UI
-    - Gradio UI (future)
-    - RAGPipeline (core logic)
-    - Retriever + LLM backend
-
-Endpoints:
-----------
-1. POST /ask
-    - Receives a question
-    - Returns answer + structured citations
-
-2. POST /upload
-    - Receives a PDF file
-    - Stores it locally
-    - Rebuilds RAG pipeline with new document
-
-IMPORTANT DESIGN RULES:
------------------------
-- NO embedding logic here
-- NO chunking logic here
-- NO FAISS logic here
-- NO LLM logic here
-
-This file ONLY orchestrates existing components.
-
-Phase A.4:
-----------
-Adds structured citation support.
-
-API response format:
-
-{
-    "question": "...",
-    "answer": "...",
-    "sources": [
-        {
-            "source": "document.pdf",
-            "page": 5
-        }
-    ]
-}
+Key improvements:
+-----------------
+✔ Docker-safe file handling
+✔ Robust upload directory creation
+✔ Safer payload validation
+✔ Prevents FileNotFoundError crashes
+✔ Stable Streamlit + Gradio compatibility
 """
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 import shutil
 import os
 
@@ -67,14 +32,14 @@ app = FastAPI(
     version="1.0"
 )
 
-UPLOAD_DIR = "data/uploads"
+# Safe upload directory (Docker-safe)
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 print("Initializing RAG system...")
 
 llm = OllamaLLM()
 
-# Default pipeline
 rag = RAGPipeline(
     retriever=Retriever(),
     llm=llm
@@ -87,7 +52,6 @@ rag = RAGPipeline(
 
 @app.get("/")
 def root():
-
     return {
         "status": "ok",
         "message": "RAG API is running"
@@ -101,15 +65,28 @@ def root():
 @app.post("/ask")
 def ask_question(payload: dict):
 
-    question = payload.get("question", "")
+    question = payload.get("question")
 
-    result = rag.ask(question)
+    if not question:
+        raise HTTPException(
+            status_code=400,
+            detail="Question cannot be empty"
+        )
 
-    return {
-        "question": question,
-        "answer": result.get("answer", ""),
-        "sources": result.get("sources", [])
-    }
+    try:
+        result = rag.ask(question)
+
+        return {
+            "question": question,
+            "answer": result.get("answer", ""),
+            "sources": result.get("sources", [])
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG processing failed: {str(e)}"
+        )
 
 
 # --------------------------------------------------
@@ -119,31 +96,46 @@ def ask_question(payload: dict):
 @app.post("/upload")
 def upload_pdf(file: UploadFile = File(...)):
 
-    file_path = os.path.join(
-        UPLOAD_DIR,
-        file.filename
-    )
-
-    # Save uploaded PDF
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(
-            file.file,
-            buffer
+    if not file:
+        raise HTTPException(
+            status_code=400,
+            detail="No file uploaded"
         )
 
-    print("PDF received:", file.filename)
-    print("Rebuilding RAG pipeline...")
+    try:
+        # Ensure upload directory exists (CRITICAL FIX)
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-    global rag
+        file_path = os.path.join(
+            UPLOAD_DIR,
+            file.filename
+        )
 
-    rag = RAGPipeline(
-        retriever=Retriever(pdf_path=file_path),
-        llm=llm
-    )
+        # IMPORTANT FIX: ensure parent directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
-    return {
-        "status": "ok",
-        "message": "PDF indexed successfully",
-        "file": file.filename
-    }
+        # Save file safely
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        print("PDF received:", file.filename)
+        print("Rebuilding RAG pipeline...")
+
+        global rag
+
+        rag = RAGPipeline(
+            retriever=Retriever(pdf_path=file_path),
+            llm=llm
+        )
+
+        return {
+            "status": "ok",
+            "message": "PDF indexed successfully",
+            "file": file.filename
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Upload failed: {str(e)}"
+        )
