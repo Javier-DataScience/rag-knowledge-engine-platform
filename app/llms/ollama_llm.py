@@ -1,13 +1,17 @@
 """
-Ollama LLM Wrapper (Phase A Stable Version)
+Ollama LLM Wrapper (Stable Environment-Safe Version)
 
 Purpose:
-- Provide a clean interface to Ollama local server
-- Remove environment ambiguity (localhost vs docker vs host.docker.internal)
-- Ensure reliable chat() calls from both local and future Docker setups
+--------
+This module provides a clean interface to communicate with Ollama.
 
-Key decision:
-- We explicitly use 127.0.0.1 because this module is executed on the HOST (not inside Docker)
+It is designed to work in BOTH:
+- Local execution (Windows / Python)
+- Docker containers (FastAPI, Streamlit, Gradio)
+
+Key principle:
+- Host is controlled via environment variable
+- Falls back safely to local Ollama instance
 """
 
 import os
@@ -17,17 +21,21 @@ from ollama import Client
 class OllamaLLM:
     def __init__(self):
         """
-        Initialize Ollama client with a stable host configuration.
+        Initialize Ollama client with environment-safe configuration.
         """
 
-        # Explicit and safe default for local execution
-        self.host = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+        # If running locally → uses localhost
+        # If running in Docker → override via OLLAMA_HOST env variable
+        self.host = os.getenv(
+            "OLLAMA_HOST",
+            "http://127.0.0.1:11434"
+        )
 
         self.client = Client(host=self.host)
 
     def generate(self, prompt: str) -> str:
         """
-        Generate response using Ollama chat model.
+        Send prompt to Ollama and return generated response.
         """
 
         try:
@@ -41,7 +49,6 @@ class OllamaLLM:
                 ]
             )
 
-            # Ollama returns structured response
             return response["message"]["content"]
 
         except Exception as e:

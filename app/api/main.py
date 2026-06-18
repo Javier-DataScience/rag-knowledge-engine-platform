@@ -3,20 +3,25 @@ Module: main.py (FastAPI API Layer)
 
 Purpose:
 --------
-REST API layer for RAG Knowledge Engine.
+This module exposes the RAG system as a REST API.
 
-Key improvements:
------------------
-✔ Docker-safe file handling
-✔ Robust upload directory creation
-✔ Safer payload validation
-✔ Prevents FileNotFoundError crashes
-✔ Stable Streamlit + Gradio compatibility
+It is a thin orchestration layer:
+- FastAPI endpoints only
+- No ML logic inside
+- No embeddings or FAISS logic inside
+
+Fixes included:
+---------------
+✔ Safe error handling for /ask (prevents silent 500 crashes)
+✔ Better logging for debugging inside Docker
+✔ Robust response format
+✔ Prevents container "silent failures"
 """
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File
 import shutil
 import os
+import traceback
 
 from app.retrieval.retriever import Retriever
 from app.llms.ollama_llm import OllamaLLM
@@ -32,8 +37,7 @@ app = FastAPI(
     version="1.0"
 )
 
-# Safe upload directory (Docker-safe)
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "data/uploads")
+UPLOAD_DIR = "data/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 print("Initializing RAG system...")
@@ -47,7 +51,7 @@ rag = RAGPipeline(
 
 
 # --------------------------------------------------
-# Health Check
+# Health check
 # --------------------------------------------------
 
 @app.get("/")
@@ -59,62 +63,54 @@ def root():
 
 
 # --------------------------------------------------
-# Question Answering Endpoint
+# Ask endpoint (FIXED - SAFE VERSION)
 # --------------------------------------------------
 
 @app.post("/ask")
 def ask_question(payload: dict):
 
-    question = payload.get("question")
-
-    if not question:
-        raise HTTPException(
-            status_code=400,
-            detail="Question cannot be empty"
-        )
-
     try:
+        question = payload.get("question", "")
+
+        if not question:
+            return {
+                "error": "Empty question received"
+            }
+
         result = rag.ask(question)
+
+        # Safe extraction (prevents crash if keys missing)
+        answer = result.get("answer", "No answer generated")
+        sources = result.get("sources", [])
 
         return {
             "question": question,
-            "answer": result.get("answer", ""),
-            "sources": result.get("sources", [])
+            "answer": answer,
+            "sources": sources
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"RAG processing failed: {str(e)}"
-        )
+
+        print("🔥 ERROR in /ask endpoint")
+        traceback.print_exc()
+
+        return {
+            "error": str(e),
+            "answer": "",
+            "sources": []
+        }
 
 
 # --------------------------------------------------
-# PDF Upload + Reindexing Endpoint
+# Upload endpoint (FIXED SAFETY)
 # --------------------------------------------------
 
 @app.post("/upload")
 def upload_pdf(file: UploadFile = File(...)):
 
-    if not file:
-        raise HTTPException(
-            status_code=400,
-            detail="No file uploaded"
-        )
-
     try:
-        # Ensure upload directory exists (CRITICAL FIX)
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        file_path = os.path.join(UPLOAD_DIR, file.filename)
 
-        file_path = os.path.join(
-            UPLOAD_DIR,
-            file.filename
-        )
-
-        # IMPORTANT FIX: ensure parent directory exists
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
-        # Save file safely
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
@@ -135,7 +131,11 @@ def upload_pdf(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Upload failed: {str(e)}"
-        )
+
+        print("🔥 ERROR in /upload endpoint")
+        traceback.print_exc()
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }

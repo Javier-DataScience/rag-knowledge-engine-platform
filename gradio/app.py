@@ -43,7 +43,7 @@ import os
 
 API_URL = os.getenv(
     "API_URL",
-    "http://host.docker.internal:8000"
+    "http://127.0.0.1:8000"
 )
 
 
@@ -338,6 +338,5 @@ with gr.Blocks(
 if __name__ == "__main__":
 
     demo.launch(
-    server_name="0.0.0.0",
-    server_port=7860
+        inbrowser=True
     )
