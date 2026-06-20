@@ -3,43 +3,24 @@ Module: app.py (Gradio Frontend)
 
 Purpose:
 --------
-Provides a lightweight Gradio interface for the RAG Knowledge Engine.
+Gradio UI for RAG Knowledge Engine Platform.
 
-Architecture:
--------------
-User
- ↓
-Gradio UI
- ↓
-FastAPI Backend
- ↓
-RAG Pipeline
- ↓
-FAISS Retriever + Ollama
+This UI ONLY:
+- Uploads PDFs to FastAPI
+- Sends questions to FastAPI
+- Displays answers + sources
 
-Features:
----------
-- Upload PDF documents
-- Ask questions
-- Display answers
-- Display source citations
-- Dark theme UI
-- Reuse the same FastAPI backend used by Streamlit
-
-Notes:
-------
-- No RAG logic lives here.
-- No embedding logic lives here.
-- No FAISS logic lives here.
-- No LLM logic lives here.
-
-This file only consumes the API.
+No ML logic, no embeddings, no FAISS here.
 """
 
+import os
 import requests
 import gradio as gr
 
-import os
+
+# --------------------------------------------------
+# API CONFIGURATION (Docker-safe)
+# --------------------------------------------------
 
 API_URL = os.getenv(
     "API_URL",
@@ -48,23 +29,25 @@ API_URL = os.getenv(
 
 
 # --------------------------------------------------
-# Upload PDF
+# UPLOAD PDF FUNCTION (FIXED)
 # --------------------------------------------------
 
 def upload_pdf(file):
 
     if file is None:
-        return "Please select a PDF file."
+        return "❌ Please select a PDF file."
 
     try:
+        # Gradio provides a file object, NOT a path string
+        file_path = file.name
 
-        with open(file, "rb") as f:
+        with open(file_path, "rb") as f:
 
             response = requests.post(
                 f"{API_URL}/upload",
                 files={
                     "file": (
-                        file.split("\\")[-1],
+                        os.path.basename(file_path),
                         f,
                         "application/pdf"
                     )
@@ -73,218 +56,102 @@ def upload_pdf(file):
             )
 
         response.raise_for_status()
-
         result = response.json()
 
         return (
-            f"✅ {result['message']}\n"
-            f"File: {result['file']}"
+            f"✅ {result.get('message', 'Upload successful')}\n"
+            f"File: {result.get('file', file_path)}"
         )
 
-    except Exception as e:
+    except requests.exceptions.ConnectionError:
+        return "❌ Cannot connect to FastAPI backend."
 
+    except requests.exceptions.Timeout:
+        return "❌ Upload timed out. Backend still processing."
+
+    except Exception as e:
         return f"❌ Upload failed: {str(e)}"
 
 
 # --------------------------------------------------
-# Ask Question
+# ASK QUESTION FUNCTION
 # --------------------------------------------------
 
 def ask_question(question):
 
-    if not question.strip():
-
-        return (
-            "Please enter a question.",
-            ""
-        )
+    if not question or not question.strip():
+        return "Please enter a question.", ""
 
     try:
-
         response = requests.post(
             f"{API_URL}/ask",
-            json={
-                "question": question
-            },
+            json={"question": question},
             timeout=300
         )
 
         response.raise_for_status()
-
         result = response.json()
 
-        answer = result.get(
-            "answer",
-            ""
+        answer = result.get("answer", "")
+        sources = result.get("sources", [])
+
+        if not sources:
+            return answer, "No sources returned."
+
+        unique_sources = set()
+
+        for source in sources:
+
+            if isinstance(source, dict):
+                source_name = source.get("source", "Unknown Source")
+                page = source.get("page", "N/A")
+            else:
+                source_name = str(source)
+                page = "N/A"
+
+            unique_sources.add((source_name, page))
+
+        formatted_sources = "\n".join(
+            f"• {src} (Page {page})"
+            for src, page in sorted(unique_sources, key=lambda x: str(x[1]))
         )
 
-        sources = result.get(
-            "sources",
-            []
-        )
+        return answer, formatted_sources
 
-        if len(sources) == 0:
+    except requests.exceptions.ConnectionError:
+        return "Error: Cannot connect to backend.", ""
 
-            sources_text = (
-                "No sources returned."
-            )
-
-        else:
-
-            unique_sources = set()
-
-            for source in sources:
-
-                source_name = source.get(
-                    "source",
-                    "Unknown Source"
-                )
-
-                page = source.get(
-                    "page",
-                    "N/A"
-                )
-
-                unique_sources.add(
-                    (source_name, page)
-                )
-
-            lines = []
-
-            for source_name, page in sorted(
-                unique_sources,
-                key=lambda x: str(x[1])
-            ):
-
-                lines.append(
-                    f"• {source_name} (Page {page})"
-                )
-
-            sources_text = "\n".join(lines)
-
-        return (
-            answer,
-            sources_text
-        )
+    except requests.exceptions.Timeout:
+        return "Error: Request timed out.", ""
 
     except Exception as e:
-
-        return (
-            f"Error: {str(e)}",
-            ""
-        )
+        return f"Error: {str(e)}", ""
 
 
 # --------------------------------------------------
-# Gradio UI
+# GRADIO UI (FIXED DARK MODE + DOCKER SAFE)
 # --------------------------------------------------
 
 with gr.Blocks(
     title="RAG Knowledge Engine Platform",
-    css="""
-    body {
-        background-color: #111111;
-    }
-
-    .gradio-container {
-        background-color: #111111 !important;
-    }
-
-    /* Main title */
-    h1 {
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
-    }
-
-    /* Section titles */
-    h2, h3 {
-        color: #F5F5F5 !important;
-    }
-
-    /* Text */
-    p, label, span {
-        color: #D9D9D9 !important;
-    }
-
-    /* Cards / containers */
-    .gr-group,
-    .gr-box,
-    .gr-form,
-    .block {
-        background-color: #1A1A1A !important;
-        border: 1px solid #333333 !important;
-    }
-
-    /* Textbox containers */
-    .gr-textbox {
-        background-color: #1A1A1A !important;
-    }
-
-    /* Input fields */
-    textarea,
-    input {
-        background-color: #222222 !important;
-        color: #FFFFFF !important;
-        border: 1px solid #444444 !important;
-    }
-
-    /* Buttons */
-    button {
-        background-color: #2F2F2F !important;
-        color: #FFFFFF !important;
-        border: 1px solid #555555 !important;
-    }
-
-    footer {
-        display: none !important;
-    }
-    
-        /* ------------------------------------
-   File Upload Area
------------------------------------- */
-
-[data-testid="file-upload"] {
-    background-color: #1E1E1E !important;
-    border: 1px solid #444444 !important;
-    color: #FFFFFF !important;
-}
-
-[data-testid="file-upload"] * {
-    color: #D9D9D9 !important;
-}
-
-.file-preview,
-.file-upload,
-.upload-box {
-    background-color: #1E1E1E !important;
-    color: #FFFFFF !important;
-    border: 1px solid #444444 !important;
-}
-    """
+    theme=gr.themes.Soft()
 ) as demo:
 
-    gr.Markdown(
-        "# RAG Knowledge Engine Platform"
-    )
+    gr.Markdown("# RAG Knowledge Engine Platform")
+    gr.Markdown("Upload a PDF and ask questions about it.")
 
-    gr.Markdown(
-        "Upload a PDF and ask questions about it."
-    )
-
-    # ----------------------------------------------
+    # --------------------------
     # Upload Section
-    # ----------------------------------------------
+    # --------------------------
 
     gr.Markdown("## Upload PDF")
 
     pdf_file = gr.File(
         file_types=[".pdf"],
-        label="PDF Document"
+        label="Select PDF Document"
     )
 
-    upload_button = gr.Button(
-        "Upload and Index PDF"
-    )
+    upload_button = gr.Button("Upload and Index PDF")
 
     upload_status = gr.Textbox(
         label="Upload Status"
@@ -296,9 +163,9 @@ with gr.Blocks(
         outputs=upload_status
     )
 
-    # ----------------------------------------------
-    # Question Answering Section
-    # ----------------------------------------------
+    # --------------------------
+    # Q&A Section
+    # --------------------------
 
     gr.Markdown("## Ask Questions")
 
@@ -307,9 +174,7 @@ with gr.Blocks(
         placeholder="What is supervised machine learning?"
     )
 
-    ask_button = gr.Button(
-        "Ask"
-    )
+    ask_button = gr.Button("Ask")
 
     answer = gr.Textbox(
         label="Answer",
@@ -324,19 +189,17 @@ with gr.Blocks(
     ask_button.click(
         fn=ask_question,
         inputs=question,
-        outputs=[
-            answer,
-            sources
-        ]
+        outputs=[answer, sources]
     )
 
 
 # --------------------------------------------------
-# Launch
+# DOCKER-SAFE LAUNCH
 # --------------------------------------------------
 
 if __name__ == "__main__":
 
     demo.launch(
-        inbrowser=True
+        server_name="0.0.0.0",
+        server_port=7860
     )
