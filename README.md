@@ -1,7 +1,48 @@
 # RAG Knowledge Engine Platform
 
-<!-- Optional banner image -->
-<!-- You can insert a screenshot or architecture image here -->
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.10-blue?logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/FastAPI-005571?logo=fastapi" />
+  <img src="https://img.shields.io/badge/Ollama-Llama3-black?logo=ai" />
+  <img src="https://img.shields.io/badge/FAISS-Vector_Search-orange" />
+  <img src="https://img.shields.io/badge/Docker-Containerization-blue?logo=docker" />
+  <img src="https://img.shields.io/badge/Streamlit-App-red?logo=streamlit" />
+  <img src="https://img.shields.io/badge/Gradio-UI-green" />
+</p>
+
+---
+
+## Overview
+
+## Project Visual Overview
+
+<p align="center">
+  <img src="RAG.png" width="800"/>
+</p>
+
+<p align="center">
+  <img src="RAG1.png" width="800"/>
+</p>
+
+<p align="center">
+  <img src="RAG2.png" width="800"/>
+</p>
+
+<p align="center">
+  <img src="RAG3.png" width="800"/>
+</p>
+
+<p align="center">
+  <img src="RAG4.png" width="800"/>
+</p>
+
+<p align="center">
+  <img src="RAG5.png" width="800"/>
+</p>
+
+<p align="center">
+  <img src="RAG6.png" width="800"/>
+</p>
 
 ---
 
