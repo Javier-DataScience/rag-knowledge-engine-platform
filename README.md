@@ -17,31 +17,31 @@
 ## Project Visual Overview
 
 <p align="center">
-  <img src="RAG.png" width="800"/>
+  <img src="rag.png" width="800"/>
 </p>
 
 <p align="center">
-  <img src="RAG1.png" width="800"/>
+  <img src="rag1.png" width="800"/>
 </p>
 
 <p align="center">
-  <img src="RAG2.png" width="800"/>
+  <img src="rag2.png" width="800"/>
 </p>
 
 <p align="center">
-  <img src="RAG3.png" width="800"/>
+  <img src="rag3.png" width="800"/>
 </p>
 
 <p align="center">
-  <img src="RAG4.png" width="800"/>
+  <img src="rag4.png" width="800"/>
 </p>
 
 <p align="center">
-  <img src="RAG5.png" width="800"/>
+  <img src="rag5.png" width="800"/>
 </p>
 
 <p align="center">
-  <img src="RAG6.png" width="800"/>
+  <img src="rag6.png" width="800"/>
 </p>
 
 ---
