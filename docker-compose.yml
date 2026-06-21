@@ -1,0 +1,105 @@
+version: "3.9"
+
+services:
+
+  # ---------------------------------------
+  # 1. FASTAPI BACKEND (RAG ENGINE)
+  # ---------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_HOST=http://host.docker.internal:11434
+
+    # IMPORTANT: prevent restart loops that spike RAM
+    restart: "no"
+
+    # reduce CPU contention
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 3G
+
+    # ensures API waits for Ollama (soft dependency)
+    depends_on:
+      - ollama
+
+  # ---------------------------------------
+  # 2. STREAMLIT UI (LIGHTWEIGHT)
+  # ---------------------------------------
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: rag-streamlit
+    ports:
+      - "8501:8501"
+
+    environment:
+      - API_URL=http://api:8000
+
+    depends_on:
+      - api
+
+    restart: "no"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  # ---------------------------------------
+  # 3. GRADIO UI (LIGHTWEIGHT)
+  # ---------------------------------------
+  gradio:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    container_name: rag-gradio
+    ports:
+      - "7860:7860"
+
+    environment:
+      - API_URL=http://api:8000
+
+    depends_on:
+      - api
+
+    restart: "no"
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  # ---------------------------------------
+  # 4. OLLAMA (EXTERNAL MEMORY HEAVY SERVICE)
+  # ---------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+
+    ports:
+      - "11434:11434"
+
+    restart: unless-stopped
+
+    # VERY IMPORTANT: isolate memory usage
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 6G
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:
